@@ -144,7 +144,6 @@ class _MenuScreenState extends State<MenuScreen>
                       Text(
                         '• Tap only the BLACK tiles\n'
                         '• Don\'t tap the WHITE tiles\n'
-                        '• Don\'t miss any BLACK tiles\n'
                         '• Speed increases as you go!',
                         style: TextStyle(
                           fontSize: 16,

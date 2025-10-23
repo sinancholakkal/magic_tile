@@ -94,92 +94,22 @@ class GameScreen extends StatelessWidget {
                             Positioned.fill(
                               child: SingleChildScrollView(
                                 physics: const NeverScrollableScrollPhysics(),
-                                child: Transform.translate(
-                                  offset: Offset(0, -constraints.maxHeight + controller.scrollOffset),
-                                  child: Column(
-                                    children: controller.rows.reversed.map((row) {
-                                    return SizedBox(
-                                      key: ValueKey<int>(row.rowIndex),
-                                      height: tileHeight,
-                                      child: Row(
-                                        children: List.generate(4, (columnIndex) {
-                                          final isActiveTile = columnIndex == row.activeTileIndex;
-                                          final isTapped = row.tiles[columnIndex].isTapped;
-                                          
-                                          return GestureDetector(
-                                            onTap: () {
-                                              controller.onTileTap(
-                                              row.rowIndex,
-                                              columnIndex,
-                                              
-                                            );
-                                            log("Tapped");
-                                            },
-                                            child: AnimatedContainer(
-                                              key: ValueKey<String>('tile-${row.rowIndex}-$columnIndex'),
-                                              duration: const Duration(milliseconds: 150),
-                                              width: tileWidth,
-                                              height: tileHeight,
-                                              decoration: BoxDecoration(
-                                                gradient: isActiveTile
-                                                    ? (isTapped 
-                                                        ? LinearGradient(
-                                                            colors: [
-                                                              Colors.grey.shade600,
-                                                              Colors.grey.shade800,
-                                                            ],
-                                                            begin: Alignment.topLeft,
-                                                            end: Alignment.bottomRight,
-                                                          )
-                                                        : LinearGradient(
-                                                            colors: [
-                                                              Colors.black87,
-                                                              Colors.black,
-                                                            ],
-                                                            begin: Alignment.topLeft,
-                                                            end: Alignment.bottomRight,
-                                                          ))
-                                                    : null,
-                                                color: isActiveTile ? null : Colors.white,
-                                                border: Border.all(
-                                                  color: Colors.grey.shade300,
-                                                  width: 0.5,
-                                                ),
-                                                boxShadow: isActiveTile && !isTapped
-                                                    ? [
-                                                        BoxShadow(
-                                                          color: Colors.black.withOpacity(0.3),
-                                                          blurRadius: 4,
-                                                          offset: const Offset(0, 2),
-                                                        ),
-                                                      ]
-                                                    : null,
-                                              ),
-                                              child: isTapped && isActiveTile
-                                                  ? TweenAnimationBuilder<double>(
-                                                      tween: Tween(begin: 0.0, end: 1.0),
-                                                      duration: const Duration(milliseconds: 200),
-                                                      builder: (context, value, child) {
-                                                        return Transform.scale(
-                                                          scale: value,
-                                                          child: const Icon(
-                                                            Icons.check_circle,
-                                                            color: Colors.white,
-                                                            size: 40,
-                                                          ),
-                                                        );
-                                                      },
-                                                    )
-                                                  : const SizedBox.shrink(),
-                                            ),
-                                          );
-                                        }),
-                                      ),
+                                child: ValueListenableBuilder<double>(
+                                  valueListenable: controller.scrollNotifier,
+                                  child: RowsList(
+                                    controller: controller,
+                                    tileWidth: tileWidth,
+                                    tileHeight: tileHeight,
+                                  ),
+                                  builder: (context, scrollValue, child) {
+                                    return Transform.translate(
+                                      offset: Offset(0, -constraints.maxHeight + scrollValue),
+                                      child: child,
                                     );
-                                  }).toList(),
+                                  },
                                 ),
                               ),
-                            ),)
+                            ),
                           ],
                         ),
                       );
@@ -191,6 +121,107 @@ class GameScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Widget that builds the column of rows and only rebuilds when the controller
+// notifies (i.e., when rows are added/removed or tapped). This prevents the
+// heavy tile rebuild on every frame while the scroll notifier updates.
+class RowsList extends StatelessWidget {
+  final GameController controller;
+  final double tileWidth;
+  final double tileHeight;
+
+  const RowsList({Key? key, required this.controller, required this.tileWidth, required this.tileHeight}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Column(
+          children: controller.rows.reversed.map((row) {
+            return SizedBox(
+              key: ValueKey<int>(row.rowIndex),
+              height: tileHeight,
+              child: Row(
+                children: List.generate(4, (columnIndex) {
+                  final isActiveTile = columnIndex == row.activeTileIndex;
+                  final isTapped = row.tiles[columnIndex].isTapped;
+
+                  return GestureDetector(
+                    onTap: () {
+                      controller.onTileTap(
+                        row.rowIndex,
+                        columnIndex,
+                      );
+                      log('Tapped');
+                    },
+                    child: AnimatedContainer(
+                      key: ValueKey<String>('tile-${row.rowIndex}-$columnIndex'),
+                      duration: const Duration(milliseconds: 150),
+                      width: tileWidth,
+                      height: tileHeight,
+                      decoration: BoxDecoration(
+                        gradient: isActiveTile
+                            ? (isTapped
+                                ? LinearGradient(
+                                    colors: [
+                                      Colors.grey.shade600,
+                                      Colors.grey.shade800,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : LinearGradient(
+                                    colors: [
+                                      Colors.black87,
+                                      Colors.black,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ))
+                            : null,
+                        color: isActiveTile ? null : Colors.white,
+                        border: Border.all(
+                          color: Colors.grey.shade300,
+                          width: 0.5,
+                        ),
+                        boxShadow: isActiveTile && !isTapped
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: isTapped && isActiveTile
+                          ? TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0.0, end: 1.0),
+                              duration: const Duration(milliseconds: 200),
+                              builder: (context, value, child) {
+                                return Transform.scale(
+                                  scale: value,
+                                  child: const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                                );
+                              },
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  );
+                }),
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

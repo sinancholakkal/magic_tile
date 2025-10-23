@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import '../models/tile.dart';
 import 'package:flutter/scheduler.dart';
@@ -8,10 +9,19 @@ enum GameState { menu, playing, gameOver }
 // --- Constants ---
 const double _kTileHeight = 100.0;       // Assumed height of a tile row
 const int _kInitialRowCount = 8;        // Rows to fill the screen at start
-const int _kMaxRowBuffer = 40;          // Max rows to keep in memory
+const int _kRowRetention = _kInitialRowCount + 6; // keep this many rows max for smooth rendering
 // Speeds are expressed in pixels per second for smooth, time-based movement
-const double _kInitialGameSpeed = 240.0; // ~4 px/frame * 60fps
-const double _kGameSpeedIncrement = 3.0; // px/sec increase per second (small acceleration)
+const double _kInitialGameSpeed = 300.0; // ~4 px/frame * 60fps
+const double _kGameSpeedIncrement = 5.0; // px/sec increase per second (small acceleration)
+
+final List<AudioPlayer> _soundPlayers = List.generate(4, (_) => AudioPlayer());
+final AudioPlayer _musicPlayer = AudioPlayer();
+final List<String> _soundFiles = [
+    'assets/audio/piano_1.wav', // Sound for column 0
+    'assets/audio/piano_2.wav', // Sound for column 1
+    'assets/audio/piano_3.wav', // Sound for column 2
+    'assets/audio/piano_4.wav', // Sound for column 3
+  ];
 
 class GameController extends ChangeNotifier {
   GameState _gameState = GameState.menu;
@@ -25,20 +35,28 @@ class GameController extends ChangeNotifier {
   final Random _random = Random();
   double _gameSpeed = _kInitialGameSpeed; // pixels per second
   int _rowCounter = 0;
+  // Expose a notifier for high-frequency scroll updates to avoid full rebuilds
+  final ValueNotifier<double> scrollNotifier = ValueNotifier<double>(0.0);
 
   GameState get gameState => _gameState;
   List<TileRow> get rows => _rows;
   int get score => _score;
   double get scrollOffset => _scrollOffset;
 
-  void startGame() {
+  Future<void> startGame() async {
+    _musicPlayer.stop();
     _gameState = GameState.playing;
     _score = 0;
     _scrollOffset = 0.0;
+    // Ensure UI starts with correct scroll value
+    scrollNotifier.value = _scrollOffset;
     _gameSpeed = _kInitialGameSpeed;
     _rowCounter = 0;
     _rows.clear();
     _rowMap.clear(); // Clear the map
+
+
+    await _prepareSounds();
 
     // Initialize with rows to fill the screen
     for (int i = 0; i < _kInitialRowCount; i++) {
@@ -47,6 +65,27 @@ class GameController extends ChangeNotifier {
 
     _startGameLoop();
     notifyListeners();
+  }
+
+  Future<void> _prepareSounds() async {
+    // Load and cache all sounds for instant playback
+    final futures = <Future>[];
+    for (int i = 0; i < _soundFiles.length; i++) {
+      final player = _soundPlayers[i];
+      // Set to low latency mode
+      futures.add(player.setReleaseMode(ReleaseMode.stop));
+      futures.add(player.setPlayerMode(PlayerMode.lowLatency));
+      // Pre-load the sound file in parallel
+      futures.add(player.setSource(AssetSource(_soundFiles[i].replaceFirst('assets/', ''))));
+    }
+    await Future.wait(futures);
+  }
+
+  Future<void> _stopAllSounds() async {
+    for (final player in _soundPlayers) {
+      await player.stop();
+    }
+    await _musicPlayer.stop();
   }
 
   void _startGameLoop() {
@@ -69,10 +108,14 @@ class GameController extends ChangeNotifier {
     final delta = (elapsed - last).inMicroseconds / 1e6;
     _lastTick = elapsed;
 
-    if (delta <= 0) return;
+    // Clamp delta to avoid large jumps when the app is paused/resumed
+    final clampedDelta = delta.clamp(0.0, 0.05);
+    if (clampedDelta <= 0) return;
 
-    // Update scroll using delta-time for smoothness
-    _scrollOffset += _gameSpeed * delta;
+  // Update scroll using delta-time for smoothness
+  _scrollOffset += _gameSpeed * clampedDelta;
+  // Push high-frequency scroll updates to the notifier (UI listens to this)
+  scrollNotifier.value = _scrollOffset;
     // Small speed-up proportional to elapsed time
     _gameSpeed += _kGameSpeedIncrement * delta;
 
@@ -82,7 +125,7 @@ class GameController extends ChangeNotifier {
       _addNewRow();
 
       // Remove old rows that are off screen
-      if (_rows.isNotEmpty && _rows.length > _kMaxRowBuffer) {
+      if (_rows.isNotEmpty && _rows.length > _kRowRetention) {
         final removedRow = _rows.removeAt(0);
         _rowMap.remove(removedRow.rowIndex); // Remove from map
 
@@ -92,9 +135,14 @@ class GameController extends ChangeNotifier {
           return;
         }
       }
-    }
 
-    notifyListeners();
+      // Keep the scrollNotifier in sync after adjusting offset so the UI
+      // transform doesn't render a brief gap/jump on the next frame.
+      scrollNotifier.value = _scrollOffset;
+
+      // Notify listeners when the rows list actually changes (less frequent)
+      notifyListeners();
+    }
   }
 
   // Legacy: _updateGame replaced by frame-synced _onTick
@@ -121,6 +169,14 @@ class GameController extends ChangeNotifier {
     // Check if tapped the correct tile (black tile)
     if (columnIndex == rowInList.activeTileIndex) {
       if (!rowInList.tiles[columnIndex].isTapped) {
+
+        if (columnIndex < _soundPlayers.length) {
+          // Stop any previous instance and play immediately
+          _soundPlayers[columnIndex].stop().then((_) {
+            _soundPlayers[columnIndex].resume();
+          });
+        }
+
         rowInList.tiles[columnIndex].isTapped = true;
         _score++;
         notifyListeners();
@@ -136,6 +192,7 @@ class GameController extends ChangeNotifier {
     _ticker?.stop();
     _ticker?.dispose();
     _ticker = null;
+    _stopAllSounds(); // Stop any playing sounds immediately
     notifyListeners();
   }
 
@@ -144,6 +201,7 @@ class GameController extends ChangeNotifier {
     _ticker?.stop();
     _ticker?.dispose();
     _ticker = null;
+    _stopAllSounds();
     notifyListeners();
   }
 
@@ -152,6 +210,12 @@ class GameController extends ChangeNotifier {
     _ticker?.stop();
     _ticker?.dispose();
     _ticker = null;
+    _stopAllSounds();
+    // Release all players
+    for (final player in _soundPlayers) {
+      player.dispose();
+    }
+    scrollNotifier.dispose();
     super.dispose();
   }
 }
