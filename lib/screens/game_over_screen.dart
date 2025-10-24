@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:magic_tile/state/high_score_state.dart';
+import 'package:provider/provider.dart';
 import '../game/game_controller.dart';
 
 class GameOverScreen extends StatefulWidget {
   final GameController controller;
-  
+
   const GameOverScreen({super.key, required this.controller});
 
   @override
   State<GameOverScreen> createState() => _GameOverScreenState();
 }
 
-class _GameOverScreenState extends State<GameOverScreen> 
+class _GameOverScreenState extends State<GameOverScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  bool isNewHighScore = false;
 
   @override
   void initState() {
@@ -25,20 +28,20 @@ class _GameOverScreenState extends State<GameOverScreen>
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeIn,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.elasticOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
     );
 
     _animationController.forward();
+
+    // Update high score after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final highScoreState = context.read<HighScoreState>();
+      await highScoreState.updateHighScore(widget.controller.score);
+    });
   }
 
   @override
@@ -49,16 +52,15 @@ class _GameOverScreenState extends State<GameOverScreen>
 
   @override
   Widget build(BuildContext context) {
+    final highScoreState = context.watch<HighScoreState>();
+    final isNewHighScore = highScoreState.isNewHighScore;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.red.shade800,
-              Colors.orange.shade900,
-            ],
+            colors: [Colors.red.shade800, Colors.orange.shade900],
           ),
         ),
         child: SafeArea(
@@ -106,29 +108,62 @@ class _GameOverScreenState extends State<GameOverScreen>
                       ),
                       child: Column(
                         children: [
-                          const Text(
-                            'Your Score',
-                            style: TextStyle(
-                              fontSize: 24,
-                              color: Colors.white70,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isNewHighScore
+                                    ? 'NEW HIGH SCORE!'
+                                    : 'Your Score',
+                                style: TextStyle(
+                                  fontSize: isNewHighScore ? 20 : 24,
+                                  color: isNewHighScore
+                                      ? Colors.yellow
+                                      : Colors.white70,
+                                  fontWeight: isNewHighScore
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              if (isNewHighScore) ...[
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.emoji_events,
+                                  color: Colors.yellow,
+                                  size: 24,
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.star,
+                              Icon(
+                                isNewHighScore
+                                    ? Icons.emoji_events
+                                    : Icons.star,
                                 color: Colors.yellow,
                                 size: 48,
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 '${widget.controller.score}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 72,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: isNewHighScore
+                                      ? Colors.yellow
+                                      : Colors.white,
+                                  shadows: isNewHighScore
+                                      ? [
+                                          const Shadow(
+                                            offset: Offset(2, 2),
+                                            blurRadius: 4,
+                                            color: Colors.black54,
+                                          ),
+                                        ]
+                                      : null,
                                 ),
                               ),
                             ],
@@ -204,4 +239,3 @@ class _GameOverScreenState extends State<GameOverScreen>
     );
   }
 }
-

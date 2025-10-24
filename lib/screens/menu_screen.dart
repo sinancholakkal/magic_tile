@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:magic_tile/state/high_score_state.dart';
+import 'package:provider/provider.dart';
 import '../game/game_controller.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -29,6 +31,11 @@ class _MenuScreenState extends State<MenuScreen>
         curve: Curves.easeInOut,
       ),
     );
+    
+    // Load high score after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HighScoreState>().getHighScore();
+    });
   }
 
   @override
@@ -39,6 +46,7 @@ class _MenuScreenState extends State<MenuScreen>
 
   @override
   Widget build(BuildContext context) {
+    
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -56,6 +64,7 @@ class _MenuScreenState extends State<MenuScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+              
                 // Title
                 const Text(
                   'Magic Tile',
@@ -82,7 +91,54 @@ class _MenuScreenState extends State<MenuScreen>
                     fontStyle: FontStyle.italic,
                   ),
                 ),
-                const SizedBox(height: 80),
+                const SizedBox(height: 40),
+                // High Score Display
+                Consumer<HighScoreState>(
+                  builder: (context, highScoreState, child) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 15,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(25),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.yellow,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Best: ',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '${highScoreState.highScore}',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 40),
                 // Play Button with pulse animation
                 ScaleTransition(
                   scale: _pulseAnimation,
